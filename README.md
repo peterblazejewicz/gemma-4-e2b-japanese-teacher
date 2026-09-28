@@ -28,6 +28,87 @@ answers (brief, normal or detailed).
 
 ---
 
+## Quick start
+
+The files are gated, and each of the two repositories (section 3) has its own gate. The Colab
+notebook and the llama.cpp steps use the Q4_K_M file of the GGUF repository: first, click **Agree and
+get access** on the page of
+[`blazejewicz/gemma-4-e2b-japanese-teacher-gguf`](https://huggingface.co/blazejewicz/gemma-4-e2b-japanese-teacher-gguf),
+and make an [access token](https://huggingface.co/settings/tokens) of the type **Read**.
+
+### In the browser: Google Colab
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/peterblazejewicz/gemma-4-e2b-japanese-teacher/blob/main/quick-start.ipynb)
+
+The notebook installs [llama.cpp](https://github.com/ggml-org/llama.cpp), downloads the Q4_K_M file,
+and asks the model questions with the system prompts of section 4 and the sampling of section 5. Its
+first cell tells you how to give it your token. It runs on a free runtime, with a T4 GPU or with the
+CPU.
+
+### On your computer: llama.cpp
+
+1. Install a recent llama.cpp: `winget install llama.cpp` on Windows, `brew install llama.cpp` on
+   macOS or Linux, or a build from the [releases](https://github.com/ggml-org/llama.cpp/releases)
+   (for an NVIDIA GPU on Windows or Linux, take a CUDA or Vulkan build).
+2. Give llama.cpp your token: `export HF_TOKEN=hf_...` (bash, zsh), `$env:HF_TOKEN="hf_..."`
+   (PowerShell) or `set HF_TOKEN=hf_...` (cmd).
+3. Start the server. It downloads the Q4_K_M file (3.4 GB) on the first run, and it uses a GPU that
+   the build supports:
+
+   ```bash
+   llama-server -hf blazejewicz/gemma-4-e2b-japanese-teacher-gguf:Q4_K_M --ctx-size 2048 --reasoning off --reasoning-budget 0 --temp 0.3 --top-p 0.95 --min-p 0.05 --repeat-penalty 1.05 --repeat-last-n 64 --dry-multiplier 0.8 --dry-base 1.75 --dry-allowed-length 2 --dry-penalty-last-n 128 --n-predict 400
+   ```
+
+   If another program uses port 8080, add `--port 8000` and use that port in step 4.
+4. Open <http://localhost:8080> and open **Settings**:
+   - In **General > System Message**, paste a system prompt of section 4 (for an English beginner:
+     the English base prompt alone).
+   - In **Tools**, clear the **Browser** check box. Otherwise the page adds two tool definitions to
+     the prompt, and the model was not trained with them.
+   - Click **Save settings**, then start a **New chat**.
+5. Ask a question as a learner, for example "How do I say, I take the bus to work every morning."
+   Compare the answer with the examples of section 1.
+
+The system prompt is necessary: the model was trained with it, and the level and the length work only
+through it (section 4). The flags of step 3 apply to each request, also from the chat page.
+
+### In Python: Hugging Face Transformers
+
+For the BF16 weights (10.2 GB) of
+[`blazejewicz/gemma-4-e2b-japanese-teacher`](https://huggingface.co/blazejewicz/gemma-4-e2b-japanese-teacher),
+after you accept the gate of that repository:
+
+```python
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+repo = "blazejewicz/gemma-4-e2b-japanese-teacher"
+tokenizer = AutoTokenizer.from_pretrained(repo)
+model = AutoModelForCausalLM.from_pretrained(repo, dtype=torch.bfloat16, device_map="auto")
+
+system_prompt = """..."""  # a system prompt of section 4
+messages = [{"role": "system", "content": system_prompt},
+            {"role": "user", "content": "How do I say, I take the bus to work every morning."}]
+inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt",
+                                       return_dict=True).to(model.device)
+output = model.generate(**inputs, max_new_tokens=400, do_sample=True, temperature=0.3, top_p=0.95,
+                        min_p=0.05, repetition_penalty=1.05)
+print(tokenizer.decode(output[0][inputs["input_ids"].shape[-1]:], skip_special_tokens=True))
+```
+
+Transformers has no DRY sampler; the measurements of section 2 come from llama.cpp.
+
+**Tested on 2026-09-28:** the llama.cpp steps 2 to 5 with the release build 11223 for Windows and
+CUDA 13.4, on Windows 11 with an NVIDIA RTX PRO 2000 Blackwell; the notebook in Jupyter on Ubuntu 24.04
+(WSL), with that GPU, with the CPU only, and with llama.cpp compiled for the GPU; the Transformers
+example with `transformers` 5.17.0 on the CPU; the notebook in Google Colab on a T4 GPU runtime
+(glibc 2.39, NVIDIA driver 580), with the prebuilt CUDA build of llama.cpp and the token from the
+Colab secrets: the answer came at 56 to 60 tokens/s, after the first request of the runtime (4.5
+tokens/s, which the notebook now spends on a warm-up request). Not tested: the `winget` and `brew`
+packages.
+
+---
+
 ## 1. The form of an answer
 
 Every answer has three parts, in this order:
@@ -169,7 +250,7 @@ v7 is compared with the model it was trained from, [`google/gemma-4-E2B-it`](htt
   - The Polish explanation: wrong grammar rules and case errors ("Użyj zaimek" for "Użyj zaimka").
   - Many Polish answers open with "Użyj …", also where it does not fit.
   - A question with a speech-recognition error: v7 finds the intended sentence in 21% of such questions; the untuned E4B does better (29%).
-  - Prompts with added few-shot examples score lower (43.5% on the 200 questions). Use the system prompt alone.
+  - Prompts with added few-shot examples score lower (43.5% on the 200 questions): four example turns from the training data before the question. Use the system prompt of section 4 alone. The three examples inside the Polish base prompt are part of that prompt, and the model was trained with them.
 
 **When:** the answers of v7 and the 110 questions of the base models on 2026-09-26; the 200 questions of the base models on 2026-09-24, with the same prompts, sampling and judges.
 
@@ -201,6 +282,12 @@ The Q4_K_M file on the Jetson, in its own llama-server process with the server l
 ---
 
 ## 3. Files
+
+The files are in two repositories with this card:
+[`blazejewicz/gemma-4-e2b-japanese-teacher-gguf`](https://huggingface.co/blazejewicz/gemma-4-e2b-japanese-teacher-gguf)
+holds the three GGUF files, for llama.cpp and the tools that are built on it.
+[`blazejewicz/gemma-4-e2b-japanese-teacher`](https://huggingface.co/blazejewicz/gemma-4-e2b-japanese-teacher)
+holds `model.safetensors` with its config, tokenizer and chat template, for Hugging Face Transformers.
 
 | File | Format | Size | What it is |
 | :--- | :---: | :---: | :--- |
