@@ -2,19 +2,23 @@
   "sources": [
     {
       "repo": "blazejewicz/gemma-4-e2b-japanese-teacher-gguf",
-      "revision": "b4027956d2e82311d10d42fd1fbc67ec45f49ab2",
+      "revision": "af11ba997285f9e98ed876520aecbccae5a36607",
       "folder": "."
     },
     {
       "repo": "blazejewicz/gemma-4-e2b-japanese-teacher",
-      "revision": "bd0ff82236954800ac7534e7eaf096dec1425488",
+      "revision": "958b7d42d66980a2660d7d587b50ea4567ee8cff",
       "folder": "transformers"
     }
   ],
   "files": [
+    "EVALUATION.md",
+    "SYSTEM_PROMPTS.md",
+    "TESTING.md",
     "assets/c4-components.png",
     "assets/c4-containers.png",
     "assets/c4-context.png",
+    "assets/gemma-teacher.jpg",
     "quick-start.ipynb",
     "transformers/chat_template.jinja",
     "transformers/config.json",
